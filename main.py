@@ -189,117 +189,198 @@ class Game:
             self.final_color = PINK
             self.state = "ROUND_OVER"
 
-    def draw_text(self, text, font, color, x, y, anchor="topleft"):
-        surf = font.render(text, True, color)
+    # ---------------------------------------------------------
+    # RENDER
+    # ---------------------------------------------------------
+    def draw_teks(self, teks, font, warna, x, y, anchor="topleft"):
+        surf = font.render(teks, True, warna)
         rect = surf.get_rect(**{anchor: (x, y)})
-        self.screen.blit(surf, rect)
+        self.layar.blit(surf, rect)
         return rect
 
+    # --- Answer review popup ---
+    ENTRY_H = 90
+
+    def per_page_review(self):
+        panel_h = TINGGI - 100
+        return max(1, (panel_h - 130) // self.ENTRY_H)
+
+    def total_halaman_review(self):
+        return max(1, math.ceil(len(self.riwayat) / self.per_page_review()))
+
+    def render_review(self):
+        # Dim the screen behind the popup
+        dim = pygame.Surface((LEBAR, TINGGI), pygame.SRCALPHA)
+        dim.fill((0, 0, 0, 140))
+        self.layar.blit(dim, (0, 0))
+
+        panel_w, panel_h = LEBAR - 120, TINGGI - 100
+        px, py = (LEBAR - panel_w) // 2, (TINGGI - panel_h) // 2
+
+        # Semi-transparent panel
+        panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+        pygame.draw.rect(panel, (20, 24, 36, 225), (0, 0, panel_w, panel_h), border_radius=12)
+        self.layar.blit(panel, (px, py))
+        pygame.draw.rect(self.layar, GARIS, (px, py, panel_w, panel_h), 2, border_radius=12)
+
+        self.draw_teks("ANSWER REVIEW", self.font_sedang, CYAN, LEBAR // 2, py + 15, "midtop")
+        pygame.draw.line(self.layar, GARIS, (px + 20, py + 60), (px + panel_w - 20, py + 60), 1)
+
+        warna_status = {
+            "CORRECT": HIJAU, "WRONG": MERAH, "SURRENDER": KUNING,
+            "AI FIRST": PINK, "TIME UP": MERAH, "STOPPED": KUNING,
+        }
+
+        per_page = self.per_page_review()
+        total_hal = self.total_halaman_review()
+        self.review_page = max(0, min(self.review_page, total_hal - 1))
+        mulai = self.review_page * per_page
+        tampil = self.riwayat[mulai:mulai + per_page]
+
+        if not self.riwayat:
+            self.draw_teks("No puzzles were attempted.", self.font_kecil, ABU, LEBAR // 2, py + 100, "midtop")
+
+        y = py + 70
+        for r in tampil:
+            wrn = warna_status.get(r["status"], TEKS)
+            skor_txt = f"+{r['skor']}" if r["skor"] > 0 else str(r["skor"])
+            self.draw_teks(f"#{r['no']} [{r['diff']}] {r['soal']}", self.font_kecil, TEKS, px + 25, y, "topleft")
+            self.draw_teks(f"{r['status']} ({skor_txt})", self.font_kecil, wrn, px + panel_w - 25, y, "topright")
+
+            jawab = " ".join(
+                f"{h}:{r['jawaban_pemain'][h] if r['jawaban_pemain'][h] is not None else '_'}"
+                for h in r["huruf"]
+            )
+            kunci = " ".join(f"{h}:{r['kunci_ai'].get(h, '?')}" for h in r["huruf"])
+            self.draw_teks(f"You : {jawab}", self.font_kecil, wrn if r["status"] in ("CORRECT", "WRONG") else ABU, px + 25, y + 28, "topleft")
+            self.draw_teks(f"AI  : {kunci}", self.font_kecil, HIJAU, px + 25, y + 54, "topleft")
+            y += self.ENTRY_H
+
+        footer = f"Page {self.review_page + 1}/{total_hal}  |  <- / -> : Change Page  |  R : Close"
+        self.draw_teks(footer, self.font_kecil, ABU, LEBAR // 2, py + panel_h - 35, "midtop")
+
     def render(self, now):
-        self.screen.fill(BG)
-        
+        self.layar.fill(BG)
+
         if self.state == "LOGIN":
-            self.draw_text("CRYPTARITHM DUEL", self.title_font, CYAN, LEBAR//2, 200, "midtop")
-            self.draw_text("Masukkan Username Kelompok Anda:", self.medium_font, ABU, LEBAR//2, 300, "midtop")
-            pygame.draw.rect(self.screen, PANEL, (LEBAR//2 - 250, 360, 500, 60), border_radius=8)
-            pygame.draw.rect(self.screen, GARIS, (LEBAR//2 - 250, 360, 500, 60), 2, border_radius=8)
-            
-            display_name = self.username + ("|" if (now // 500) % 2 == 0 else " ")
-            self.draw_text(display_name, self.large_font, TEKS, LEBAR//2, 365, "midtop")
-            
-            self.draw_text("Tekan ENTER untuk Lanjut", self.small_font, CYAN, LEBAR//2, 450, "midtop")
+            self.draw_teks("CRYPTARITHM DUEL", self.font_judul, CYAN, LEBAR//2, 200, "midtop")
+            self.draw_teks("Enter Your Team Username:", self.font_sedang, ABU, LEBAR//2, 300, "midtop")
+            pygame.draw.rect(self.layar, PANEL, (LEBAR//2 - 250, 360, 500, 60), border_radius=8)
+            pygame.draw.rect(self.layar, GARIS, (LEBAR//2 - 250, 360, 500, 60), 2, border_radius=8)
+
+            tampil_nama = self.username + ("|" if (now // 500) % 2 == 0 else " ")
+            self.draw_teks(tampil_nama, self.font_besar, TEKS, LEBAR//2, 365, "midtop")
+
+            self.draw_teks("Press ENTER to Continue", self.font_kecil, CYAN, LEBAR//2, 450, "midtop")
             return
-            
+
         if self.state == "MENU":
-            self.draw_text("ATURAN MAIN", self.title_font, CYAN, LEBAR//2, 160, "midtop")
-            instructions = [
-                "1. Game berlangsung maksimal 10 MENIT untuk menyelesaikan 15 Soal.",
-                "2. Soal akan muncul berurutan (5 Easy, 5 Medium, 5 Hard).",
-                "3. Setiap kemenangan memberikan (+10/+20/+30) poin.",
-                "4. Salah jawab atau didahului AI akan (-10/-20/-30) poin.",
-                "5. Hanya ada 1 KESEMPATAN Submit (ENTER) per soal.",
-                "6. Anda BISA SKIP soal (TAB) tanpa pengurangan poin.",
-                "7. Anda BISA BERHENTI & SIMPAN SKOR di akhir setiap ronde (ESC).",
-                "Tekan ENTER untuk Memulai Pertandingan!"
+            self.draw_teks("HOW TO PLAY", self.font_judul, CYAN, LEBAR//2, 120, "midtop")
+            instruksi = [
+                "1. You start with a TRIAL ROUND: practice puzzles that loop endlessly.",
+                "2. Press ESC during the trial whenever you are ready to start the real match.",
+                "3. The match lasts at most 10 MINUTES for 15 puzzles (5 Easy, 5 Medium, 5 Hard).",
+                "4. Each win gives (+10/+20/+30) points.",
+                "5. A wrong answer or being beaten by the AI costs (-10/-20/-30) points.",
+                "6. You get only 1 submit (ENTER) per puzzle, and ALL boxes must be filled.",
+                "7. Press S to SURRENDER: the match ends and you keep your current score.",
+                "8. You can STOP & SAVE your score at any time during the match (ESC).",
+                "9. Once finished, press R to review your answers and the AI's key.",
+                "Press ENTER to Start the Trial Round!"
             ]
-            for i, text in enumerate(instructions):
-                self.draw_text(text, self.small_font, ABU, LEBAR//2, 250 + (i*35), "midtop")
+            for i, teks in enumerate(instruksi):
+                warna = CYAN if i == len(instruksi) - 1 else ABU
+                self.draw_teks(teks, self.font_kecil, warna, LEBAR//2, 215 + (i*35), "midtop")
             return
 
-        duration = now - self.global_countdown
-        time_remaining = max(0, self.max_time - duration)
-        seconds_remaining = time_remaining // 1000
-        
-        self.draw_text(f"SOAL {self.puzzle_idx + 1}/15 - {self.current_diff.name}", self.small_font, KUNING, 20, 20, "topleft")
-        self.draw_text("TIMER", self.small_font, ABU, LEBAR//2, 10, "midtop")
-        self.draw_text(f"{seconds_remaining // 60:02d}:{seconds_remaining % 60:02d}", self.title_font, MERAH if time_remaining < 60000 else CYAN, LEBAR//2, 35, "midtop")
-        self.draw_text(f"TOTAL SKOR: {self.total_score}", self.medium_font, HIJAU if self.total_score >= 0 else MERAH, LEBAR - 20, 20, "topright")
-        pygame.draw.line(self.screen, GARIS, (0, 100), (LEBAR, 100), 2)
-
+        # HEADER & TIMER
         if self.state == "MATCH_OVER":
-            self.draw_text("PERTANDINGAN SELESAI!", self.title_font, CYAN, LEBAR//2, 250, "midtop")
-            self.draw_text(f"Tim: {self.username}", self.large_font, ABU, LEBAR//2, 330, "midtop")
-            self.draw_text(f"SKOR AKHIR ANDA: {self.total_score}", self.title_font, HIJAU if self.total_score >= 0 else MERAH, LEBAR//2, 390, "midtop")
-            self.draw_text("Tekan SPACE untuk kembali", self.small_font, KUNING, LEBAR//2, 500, "midtop")
-            return
-
-        self.draw_text("Teka-Teki:", self.small_font, ABU, LEBAR//2, 120, "midtop")
-        self.draw_text(f"{self.w1} + {self.w2} = {self.w3}", self.title_font, TEKS, LEBAR//2, 145, "midtop")
-
-        letter_count = len(self.unique_letters)
-        box_width, box_height, gap = 60, 80, 15
-        start_x = LEBAR//2 - ((letter_count * box_width) + ((letter_count - 1) * gap))//2
-
-        self.draw_text("AI:", self.small_font, PINK, LEBAR//2, 240, "midtop")
-        for i, letter in enumerate(self.unique_letters):
-            x = start_x + (i * (box_width + gap))
-            pygame.draw.rect(self.screen, PANEL, (x, 270, box_width, box_height), border_radius=8)
-            pygame.draw.rect(self.screen, GARIS, (x, 270, box_width, box_height), 2, border_radius=8)
-            self.draw_text(letter, self.small_font, ABU, x + box_width//2, 280, "midtop")
-            pygame.draw.circle(self.screen, HIJAU if letter in self.ai.ai_found else HITAM_BULAT, (x + box_width//2, 325), 15)
-
-        self.draw_text("Anda:", self.small_font, CYAN, LEBAR//2, 400, "midtop")
-        for i, letter in enumerate(self.unique_letters):
-            x = start_x + (i * (box_width + gap))
-            active = (i == self.selected_idx and self.state == "PLAYING")
-            
-            pygame.draw.rect(self.screen, CYAN if active else PANEL, (x, 430, box_width, box_height), 3 if active else 0, border_radius=8)
-            if not active: pygame.draw.rect(self.screen, GARIS, (x, 430, box_width, box_height), 2, border_radius=8)
-            self.draw_text(letter, self.small_font, ABU, x + box_width//2, 440, "midtop")
-            val = self.player_inputs[letter]
-            self.draw_text(str(val) if val is not None else "_", self.large_font, TEKS, x + box_width//2, 465, "midtop")
+            durasi = self.durasi_akhir          # timer is frozen
+        else:
+            durasi = now - self.global_waktu_mulai
+        sisa_waktu = max(0, self.waktu_maksimal - durasi)
+        detik_sisa = sisa_waktu // 1000
 
         if self.state == "PLAYING":
-            self.draw_text("Panah: Pindah | Angka: Isi | ENTER: Submit | TAB: Skip Soal", self.small_font, ABU, LEBAR//2, 550, "midtop")
+            if self.mode == "TRIAL":
+                self.draw_teks(f"TRIAL ROUND - {self.current_diff.name}", self.font_kecil, KUNING, 20, 20, "topleft")
+                self.draw_teks("PRACTICE MODE", self.font_sedang, CYAN, LEBAR//2, 30, "midtop")
+                self.draw_teks("No timer, score not counted", self.font_kecil, ABU, LEBAR//2, 68, "midtop")
+                self.draw_teks("Press ESC to start the real match", self.font_kecil, HIJAU, LEBAR - 20, 20, "topright")
+            else:
+                self.draw_teks(f"PUZZLE {self.puzzle_idx + 1}/{len(ALL_PUZZLES)} - {self.current_diff.name}", self.font_kecil, KUNING, 20, 20, "topleft")
 
-        if self.state == "ROUND_OVER":
-            overlay = pygame.Surface((LEBAR, TINGGI), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, 210))
-            self.screen.blit(overlay, (0, 0))
-            
-            self.draw_text("RONDE SELESAI", self.title_font, self.final_color, LEBAR//2, 150, "midtop")
-            self.draw_text(self.final_message, self.medium_font, TEKS, LEBAR//2, 220, "midtop")
-            
-            score_color = HIJAU if self.final_score > 0 else (KUNING if self.final_score == 0 else MERAH)
-            score_text = f"SKOR: +{self.final_score}" if self.final_score > 0 else f"SKOR: {self.final_score}"
-            self.draw_text(score_text, self.large_font, score_color, LEBAR//2, 270, "midtop")
-            self.draw_text("Kunci Jawaban:", self.small_font, ABU, LEBAR//2, 340, "midtop")
-            self.draw_text(" ".join([f"{k}:{v}" for k, v in self.solution.items()]), self.medium_font, HIJAU, LEBAR//2, 370, "midtop")
-            
-            self.draw_text("SPACE : Lanjut Soal Berikutnya", self.medium_font, CYAN, LEBAR//2, 480, "midtop")
-            self.draw_text("ESC   : Akhiri Game", self.small_font, PINK, LEBAR//2, 530, "midtop")
+        if self.state == "MATCH_OVER" or self.mode == "MATCH":
+            self.draw_teks("TIMER", self.font_kecil, ABU, LEBAR//2, 10, "midtop")
+            warna_timer = MERAH if (sisa_waktu < 60000 and self.state != "MATCH_OVER") else CYAN
+            self.draw_teks(f"{detik_sisa // 60:02d}:{detik_sisa % 60:02d}", self.font_judul, warna_timer, LEBAR//2, 35, "midtop")
+            self.draw_teks(f"TOTAL SCORE: {self.total_skor}", self.font_sedang, HIJAU if self.total_skor >= 0 else MERAH, LEBAR - 20, 20, "topright")
+        pygame.draw.line(self.layar, GARIS, (0, 100), (LEBAR, 100), 2)
+
+        if self.state == "MATCH_OVER":
+            self.draw_teks("MATCH FINISHED!", self.font_judul, CYAN, LEBAR//2, 250, "midtop")
+            self.draw_teks(f"Team: {self.username}", self.font_besar, ABU, LEBAR//2, 330, "midtop")
+            self.draw_teks(f"YOUR FINAL SCORE: {self.total_skor}", self.font_judul, HIJAU if self.total_skor >= 0 else MERAH, LEBAR//2, 390, "midtop")
+            self.draw_teks("Press R to see the correct answers", self.font_sedang, CYAN, LEBAR//2, 470, "midtop")
+            self.draw_teks("Press SPACE to go back", self.font_kecil, KUNING, LEBAR//2, 520, "midtop")
+
+            if self.review_open:
+                self.render_review()
+            return
+
+        # PUZZLE & LAYOUT
+        self.draw_teks("Puzzle:", self.font_kecil, ABU, LEBAR//2, 120, "midtop")
+        self.draw_teks(f"{self.w1} + {self.w2} = {self.w3}", self.font_judul, TEKS, LEBAR//2, 145, "midtop")
+
+        jum_huruf = len(self.huruf_unik)
+        k_w, k_h, spasi = 60, 80, 15
+        start_x = LEBAR//2 - ((jum_huruf * k_w) + ((jum_huruf - 1) * spasi))//2
+
+        # RENDER AI
+        self.draw_teks("AI:", self.font_kecil, PINK, LEBAR//2, 240, "midtop")
+        for i, huruf in enumerate(self.huruf_unik):
+            x = start_x + (i * (k_w + spasi))
+            pygame.draw.rect(self.layar, PANEL, (x, 270, k_w, k_h), border_radius=8)
+            pygame.draw.rect(self.layar, GARIS, (x, 270, k_w, k_h), 2, border_radius=8)
+            self.draw_teks(huruf, self.font_kecil, ABU, x + k_w//2, 280, "midtop")
+            pygame.draw.circle(self.layar, HIJAU if huruf in self.ai.ai_ditemukan else HITAM_BULAT, (x + k_w//2, 325), 15)
+
+        # RENDER PLAYER
+        self.draw_teks("You:", self.font_kecil, CYAN, LEBAR//2, 400, "midtop")
+        for i, huruf in enumerate(self.huruf_unik):
+            x = start_x + (i * (k_w + spasi))
+            aktif = (i == self.selected_idx and self.state == "PLAYING")
+
+            pygame.draw.rect(self.layar, CYAN if aktif else PANEL, (x, 430, k_w, k_h), 3 if aktif else 0, border_radius=8)
+            if not aktif:
+                pygame.draw.rect(self.layar, GARIS, (x, 430, k_w, k_h), 2, border_radius=8)
+            self.draw_teks(huruf, self.font_kecil, ABU, x + k_w//2, 440, "midtop")
+            val = self.player_inputs[huruf]
+            self.draw_teks(str(val) if val is not None else "_", self.font_besar, TEKS, x + k_w//2, 465, "midtop")
+
+        if self.state == "PLAYING":
+            if self.mode == "TRIAL":
+                hint = "Arrows: Move | Digits: Fill | ENTER: Submit | S: Surrender | ESC: Start Match"
+            else:
+                hint = "Arrows: Move | Digits: Fill | ENTER: Submit | S: Surrender (End Match) | ESC: Stop & Save"
+            self.draw_teks(hint, self.font_kecil, ABU, LEBAR//2, 550, "midtop")
+
+        # Result of the previous puzzle (small text, does not pause the game)
+        if self.notif_teks and now < self.notif_sampai:
+            self.draw_teks(self.notif_teks, self.font_kecil, self.notif_warna, LEBAR//2, TINGGI - 12, "midbottom")
+
 
 def main():
     pygame.init()
-    screen = pygame.display.set_mode((LEBAR, TINGGI))
+    layar = pygame.display.set_mode((LEBAR, TINGGI))
     pygame.display.set_caption("Cryptarithm Duel")
     clock = pygame.time.Clock()
-    game = Game(screen)
+    game = Game(layar)
 
     while game.running:
         now = pygame.time.get_ticks()
         for event in pygame.event.get():
-            game.process_event(event, now)
+            game.proses_event(event, now)
         game.update(now)
         game.render(now)
         pygame.display.flip()
@@ -307,6 +388,7 @@ def main():
 
     pygame.quit()
     sys.exit()
+
 
 if __name__ == "__main__":
     main()
