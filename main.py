@@ -6,22 +6,9 @@ import csv
 import os
 import math
 
+from agent import AIAgent
 from config import *
 from algorithms import solve_cryptarithm_dfs_fast, solve_cryptarithm_dfs_realtime
-
-
-class AIAgent:
-    # Holds shared state between the Main Thread (UI) and the realtime AI Background Thread.
-    def __init__(self):
-        self.ai_ditemukan = []
-        self.jawaban_ditemukan = False
-        self.is_playing = False
-
-    def setup_round(self):
-        self.ai_ditemukan = []
-        self.jawaban_ditemukan = False
-        self.is_playing = True
-
 
 class Game:
     def __init__(self, layar):
