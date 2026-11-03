@@ -21,11 +21,12 @@ class Game:
 
         # States: LOGIN -> MENU -> PLAYING (mode TRIAL, loops forever) -> PLAYING (mode MATCH) -> MATCH_OVER
         self.state = "LOGIN"
-        self.mode = "TRIAL"          # "TRIAL" or "MATCH"
+        self.mode = "TRIAL"
         self.puzzles = TRIAL_PUZZLES
 
         self.ai = AIAgent()
         self.ai_thread = None
+        self.jeda_ai_sampai = 0
         self.username = ""
         self.total_skor = 0
         self.puzzle_idx = 0
@@ -59,10 +60,8 @@ class Game:
         self.is_saved = True
 
     def hentikan_ai(self):
-        """Stop the old AI thread and wait briefly so it doesn't clash with the next round."""
+        """Hentikan AI ronde lama. Thread langsung bangun & keluar sendiri."""
         self.ai.is_playing = False
-        if self.ai_thread is not None and self.ai_thread.is_alive():
-            self.ai_thread.join(timeout=1.0)
 
     def set_notif(self, teks, warna, durasi=2500):
         self.notif_teks = teks
@@ -111,10 +110,14 @@ class Game:
     # GAME LOGIC
     # ---------------------------------------------------------
     def muat_soal(self):
-        # Make sure the previous AI thread has really stopped
+        # Hentikan AI lama, lalu pakai objek AIAgent BARU.
+        # Thread lama tetap memegang objek lamanya, jadi tidak bisa
+        # mengotori indikator / jawaban_ditemukan milik soal baru.
         self.hentikan_ai()
+        self.ai = AIAgent()
+        self.jeda_ai_sampai = 0
 
-        soal, diff = self.puzzles[self.puzzle_idx]
+        soal, diff, delay_ai = self.puzzles[self.puzzle_idx]
         self.current_diff = diff
 
         w1, w2, w3 = soal
@@ -128,9 +131,7 @@ class Game:
         self.selected_idx = 0
 
         self.ai.setup_round()
-        delay_ai = self.current_diff.value[1]
 
-        # Run the AI in the background
         self.ai_thread = threading.Thread(
             target=solve_cryptarithm_dfs_realtime,
             args=(self.w1, self.w2, self.w3, self.ai, delay_ai)
@@ -163,7 +164,7 @@ class Game:
         self.muat_soal()
 
     def kalkulasi_poin(self, menang):
-        multiplier = self.current_diff.value[0]
+        multiplier = self.current_diff.value
         base_poin = 10
         return (base_poin * multiplier) if menang else (-base_poin * multiplier)
 
@@ -216,6 +217,10 @@ class Game:
             self.mulai_trial()
 
         elif self.state == "PLAYING":
+            # AI sudah menang: abaikan input sampai soal berganti
+            if self.jeda_ai_sampai:
+                return
+
             if event.key == pygame.K_LEFT:
                 self.selected_idx = (self.selected_idx - 1) % len(self.huruf_unik)
             elif event.key == pygame.K_RIGHT:
@@ -281,6 +286,17 @@ class Game:
         if self.state != "PLAYING":
             return
 
+        # AI menemukan solusi: skor langsung dicatat, lalu jeda agar hijau terlihat
+        if self.ai.jawaban_ditemukan:
+            if self.jeda_ai_sampai == 0:
+                self.jeda_ai_sampai = now + 1200
+                skor = self.kalkulasi_poin(False)
+                self.catat_hasil("AI FIRST", skor, "The AI solved the puzzle first!", PINK)
+            elif now >= self.jeda_ai_sampai:
+                self.jeda_ai_sampai = 0
+                self.lanjut_soal()
+            return
+
         if self.mode == "MATCH":
             durasi_berjalan = now - self.global_waktu_mulai
             sisa_waktu = max(0, self.waktu_maksimal - durasi_berjalan)
@@ -290,12 +306,6 @@ class Game:
                 self.catat_hasil("TIME UP", 0, "Time is up", MERAH)
                 self.selesai_pertandingan()
                 return
-
-        if self.ai.jawaban_ditemukan:
-            self.ai.is_playing = False
-            skor = self.kalkulasi_poin(False)
-            self.catat_hasil("AI FIRST", skor, "The AI solved the puzzle first!", PINK)
-            self.lanjut_soal()
 
     # ---------------------------------------------------------
     # RENDER
@@ -446,12 +456,20 @@ class Game:
 
         # RENDER AI
         self.draw_teks("AI:", self.font_kecil, PINK, LEBAR//2, 240, "midtop")
+        final = self.ai.jawaban_ditemukan
         for i, huruf in enumerate(self.huruf_unik):
             x = start_x + (i * (k_w + spasi))
             pygame.draw.rect(self.layar, PANEL, (x, 270, k_w, k_h), border_radius=8)
             pygame.draw.rect(self.layar, GARIS, (x, 270, k_w, k_h), 2, border_radius=8)
             self.draw_teks(huruf, self.font_kecil, ABU, x + k_w//2, 280, "midtop")
-            pygame.draw.circle(self.layar, HIJAU if huruf in self.ai.ai_ditemukan else HITAM_BULAT, (x + k_w//2, 325), 15)
+
+            if final:
+                warna_bulat = HIJAU
+            elif huruf in self.ai.ai_ditemukan:
+                warna_bulat = KUNING
+            else:
+                warna_bulat = HITAM_BULAT
+            pygame.draw.circle(self.layar, warna_bulat, (x + k_w//2, 325), 15)
 
         # RENDER PLAYER
         self.draw_teks("You:", self.font_kecil, CYAN, LEBAR//2, 400, "midtop")
