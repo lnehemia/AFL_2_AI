@@ -1,116 +1,220 @@
+# main.py
 import pygame
 import sys
 import threading
 import csv
 import os
+import math
 
 from config import *
 from algorithms import solve_cryptarithm_dfs_fast, solve_cryptarithm_dfs_realtime
-from agent import AIAgent
+
+
+class AIAgent:
+    # Holds shared state between the Main Thread (UI) and the realtime AI Background Thread.
+    def __init__(self):
+        self.ai_ditemukan = []
+        self.jawaban_ditemukan = False
+        self.is_playing = False
+
+    def setup_round(self):
+        self.ai_ditemukan = []
+        self.jawaban_ditemukan = False
+        self.is_playing = True
+
 
 class Game:
-    def __init__(self, screen):
-        self.screen = screen
+    def __init__(self, layar):
+        self.layar = layar
         self.running = True
-        self.title_font = pygame.font.SysFont("consolas", 60, bold=True)
-        self.large_font = pygame.font.SysFont("consolas", 45, bold=True)
-        self.medium_font = pygame.font.SysFont("consolas", 30, bold=True)
-        self.small_font = pygame.font.SysFont("consolas", 20)
-        
+        self.font_judul = pygame.font.SysFont("consolas", 60, bold=True)
+        self.font_besar = pygame.font.SysFont("consolas", 45, bold=True)
+        self.font_sedang = pygame.font.SysFont("consolas", 30, bold=True)
+        self.font_kecil = pygame.font.SysFont("consolas", 20)
+
+        # States: LOGIN -> MENU -> PLAYING (mode TRIAL, loops forever) -> PLAYING (mode MATCH) -> MATCH_OVER
         self.state = "LOGIN"
-        
+        self.mode = "TRIAL"          # "TRIAL" or "MATCH"
+        self.puzzles = TRIAL_PUZZLES
+
         self.ai = AIAgent()
+        self.ai_thread = None
         self.username = ""
-        self.total_score = 0
+        self.total_skor = 0
         self.puzzle_idx = 0
-        
-        self.max_time = 10 * 60 * 1000
-        self.global_countdown = 0
+
+        self.waktu_maksimal = 10 * 60 * 1000  # 10 minutes global
+        self.global_waktu_mulai = 0
+        self.durasi_akhir = 0                  # frozen elapsed time once the match ends
         self.is_saved = False
         self.current_diff = None
 
-    def save_to_csv(self):
+        # Answer history of all match puzzles (list of dict)
+        self.riwayat = []
+        self.review_open = False
+        self.review_page = 0
+
+        # Short notification (not a popup, does not pause the game)
+        self.notif_teks = ""
+        self.notif_warna = TEKS
+        self.notif_sampai = 0
+
+    # ---------------------------------------------------------
+    # UTILITIES
+    # ---------------------------------------------------------
+    def simpan_ke_csv(self):
         file_exists = os.path.isfile("leaderboard.csv")
         with open("leaderboard.csv", "a", newline='') as f:
             writer = csv.writer(f)
             if not file_exists:
-                writer.writerow(["Group_Username", "Total_Score"])
-            writer.writerow([self.username, self.total_score])
+                writer.writerow(["Username_Kelompok", "Total_Skor"])
+            writer.writerow([self.username, self.total_skor])
         self.is_saved = True
 
-    def load_question(self):
-        puzzle, diff = ALL_PUZZLES[self.puzzle_idx]
+    def hentikan_ai(self):
+        """Stop the old AI thread and wait briefly so it doesn't clash with the next round."""
+        self.ai.is_playing = False
+        if self.ai_thread is not None and self.ai_thread.is_alive():
+            self.ai_thread.join(timeout=1.0)
+
+    def set_notif(self, teks, warna, durasi=2500):
+        self.notif_teks = teks
+        self.notif_warna = warna
+        self.notif_sampai = pygame.time.get_ticks() + durasi
+
+    def catat_hasil(self, status, skor, pesan, warna):
+        """Record the result of the current puzzle. In TRIAL mode only a notification is shown."""
+        if self.mode == "MATCH":
+            self.riwayat.append({
+                "no": self.puzzle_idx + 1,
+                "diff": self.current_diff.name,
+                "soal": f"{self.w1} + {self.w2} = {self.w3}",
+                "huruf": list(self.huruf_unik),
+                "jawaban_pemain": dict(self.player_inputs),
+                "kunci_ai": dict(self.solusi) if self.solusi else {},
+                "status": status,
+                "skor": skor,
+                "pesan": pesan,
+            })
+            self.total_skor += skor
+        self.set_notif(f"Puzzle {self.puzzle_idx + 1}: {pesan}", warna)
+
+    def selesai_pertandingan(self):
+        self.hentikan_ai()
+        # Freeze the timer the moment the match ends
+        self.durasi_akhir = min(pygame.time.get_ticks() - self.global_waktu_mulai, self.waktu_maksimal)
+        self.state = "MATCH_OVER"
+        self.review_open = False
+        self.review_page = 0
+        if not self.is_saved:
+            self.simpan_ke_csv()
+
+    def lanjut_soal(self):
+        self.puzzle_idx += 1
+        if self.mode == "TRIAL":
+            # Trial loops forever
+            self.puzzle_idx %= len(self.puzzles)
+            self.muat_soal()
+        elif self.puzzle_idx >= len(self.puzzles):
+            self.selesai_pertandingan()
+        else:
+            self.muat_soal()
+
+    # ---------------------------------------------------------
+    # GAME LOGIC
+    # ---------------------------------------------------------
+    def muat_soal(self):
+        # Make sure the previous AI thread has really stopped
+        self.hentikan_ai()
+
+        soal, diff = self.puzzles[self.puzzle_idx]
         self.current_diff = diff
-        
-        w1, w2, w3 = puzzle
-        dfs_solution, dfs_efficient_order = solve_cryptarithm_dfs_fast(w1, w2, w3)
-        
+
+        w1, w2, w3 = soal
+        solusi_dfs, urutan_efisien_dfs = solve_cryptarithm_dfs_fast(w1, w2, w3)
+
         self.w1, self.w2, self.w3 = w1, w2, w3
-        self.solution = dfs_solution
-        self.unique_letters = dfs_efficient_order.copy() 
-        
-        self.player_inputs = {letter: None for letter in self.unique_letters}
+        self.solusi = solusi_dfs
+        self.huruf_unik = urutan_efisien_dfs.copy()
+
+        self.player_inputs = {h: None for h in self.huruf_unik}
         self.selected_idx = 0
-        
+
         self.ai.setup_round()
-        ai_delay = self.current_diff.value[1]
-        
-        ai_thread = threading.Thread(
-            target=solve_cryptarithm_dfs_realtime, 
-            args=(self.w1, self.w2, self.w3, self.ai, ai_delay)
+        delay_ai = self.current_diff.value[1]
+
+        # Run the AI in the background
+        self.ai_thread = threading.Thread(
+            target=solve_cryptarithm_dfs_realtime,
+            args=(self.w1, self.w2, self.w3, self.ai, delay_ai)
         )
-        ai_thread.daemon = True
-        ai_thread.start()
-        
+        self.ai_thread.daemon = True
+        self.ai_thread.start()
+
         self.state = "PLAYING"
-        self.final_message = ""
-        self.final_color = TEKS
-        self.final_score = 0
 
-    def start_game(self, now):
-        self.total_score = 0
+    def mulai_trial(self):
+        self.mode = "TRIAL"
+        self.puzzles = TRIAL_PUZZLES
         self.puzzle_idx = 0
-        self.global_countdown = now
+        self.notif_teks = ""
+        self.muat_soal()
+
+    def mulai_pertandingan(self, now):
+        self.hentikan_ai()
+        self.mode = "MATCH"
+        self.puzzles = ALL_PUZZLES
+        self.total_skor = 0
+        self.puzzle_idx = 0
+        self.global_waktu_mulai = now
+        self.durasi_akhir = 0
         self.is_saved = False
-        self.load_question()
+        self.riwayat = []
+        self.review_open = False
+        self.review_page = 0
+        self.notif_teks = ""
+        self.muat_soal()
 
-    def point_calculation(self, win):
+    def kalkulasi_poin(self, menang):
         multiplier = self.current_diff.value[0]
-        base_points = 10
-        return (base_points * multiplier) if win else (-base_points * multiplier)
+        base_poin = 10
+        return (base_poin * multiplier) if menang else (-base_poin * multiplier)
 
-    def evaluate_player(self):
+    def evaluasi_pemain(self):
         if None in self.player_inputs.values():
-            return False, "GAGAL: Masih ada huruf yang kosong! (-Poin)"
-            
-        used_numbers = set(self.player_inputs.values())
-        if len(used_numbers) != len(self.unique_letters):
-            return False, "GAGAL: Setiap huruf harus memiliki angka unik! (-Poin)"
+            return False, "FAILED: Some boxes are still empty!"
+
+        angka_terpakai = set(self.player_inputs.values())
+        if len(angka_terpakai) != len(self.huruf_unik):
+            return False, "FAILED: Every letter must have a unique digit!"
 
         try:
             n1 = int("".join(str(self.player_inputs[c]) for c in self.w1))
             n2 = int("".join(str(self.player_inputs[c]) for c in self.w2))
             n3 = int("".join(str(self.player_inputs[c]) for c in self.w3))
-            
-            if self.player_inputs[self.w1[0]] == 0 or self.player_inputs[self.w2[0]] == 0 or self.player_inputs[self.w3[0]] == 0:
-                return False, "GAGAL: Huruf awal tidak boleh bernilai 0! (-Poin)"
-                
-            if n1 + n2 == n3:
-                return True, "ANDA MENANG! Kalkulasi Akurat."
-            else:
-                return False, f"GAGAL: {n1} + {n2} != {n3} (-Poin)"
-        except:
-            return False, "GAGAL: Format tidak valid."
 
-    def process_event(self, event, now):
+            if self.player_inputs[self.w1[0]] == 0 or self.player_inputs[self.w2[0]] == 0 or self.player_inputs[self.w3[0]] == 0:
+                return False, "FAILED: The first letter cannot be 0!"
+
+            if n1 + n2 == n3:
+                return True, "CORRECT! Accurate calculation."
+            else:
+                return False, f"FAILED: {n1} + {n2} != {n3}"
+        except Exception:
+            return False, "FAILED: Invalid format."
+
+    # ---------------------------------------------------------
+    # EVENTS
+    # ---------------------------------------------------------
+    def proses_event(self, event, now):
         if event.type == pygame.QUIT:
             self.running = False
             self.ai.is_playing = False
             return
-            
+
         if event.type != pygame.KEYDOWN:
             return
-            
+
         if self.state == "LOGIN":
             if event.key == pygame.K_BACKSPACE:
                 self.username = self.username[:-1]
@@ -122,72 +226,89 @@ class Game:
                         self.username += event.unicode
 
         elif self.state == "MENU" and event.key == pygame.K_RETURN:
-            self.start_game(now)
-                
+            self.mulai_trial()
+
         elif self.state == "PLAYING":
             if event.key == pygame.K_LEFT:
-                self.selected_idx = (self.selected_idx - 1) % len(self.unique_letters)
+                self.selected_idx = (self.selected_idx - 1) % len(self.huruf_unik)
             elif event.key == pygame.K_RIGHT:
-                self.selected_idx = (self.selected_idx + 1) % len(self.unique_letters)
-            elif event.unicode.isnumeric():
-                active_letter = self.unique_letters[self.selected_idx]
-                self.player_inputs[active_letter] = int(event.unicode)
-                self.selected_idx = (self.selected_idx + 1) % len(self.unique_letters)
+                self.selected_idx = (self.selected_idx + 1) % len(self.huruf_unik)
+            elif event.unicode and event.unicode in "0123456789":
+                huruf_aktif = self.huruf_unik[self.selected_idx]
+                self.player_inputs[huruf_aktif] = int(event.unicode)
+                self.selected_idx = (self.selected_idx + 1) % len(self.huruf_unik)
             elif event.key == pygame.K_BACKSPACE:
-                active_letter = self.unique_letters[self.selected_idx]
-                self.player_inputs[active_letter] = None
-            elif event.key == pygame.K_TAB: 
+                huruf_aktif = self.huruf_unik[self.selected_idx]
+                self.player_inputs[huruf_aktif] = None
+            elif event.key == pygame.K_s:
                 self.ai.is_playing = False
-                self.final_score = 0
-                self.final_message = "ANDA MELAKUKAN SKIP! (Tidak ada pengurangan poin)"
-                self.final_color = KUNING
-                self.state = "ROUND_OVER"
-            elif event.key == pygame.K_RETURN: 
-                is_win, msg = self.evaluate_player()
-                self.ai.is_playing = False 
-                
-                self.final_score = self.point_calculation(True) if is_win else self.point_calculation(False)
-                self.final_color = HIJAU if is_win else MERAH
-                self.total_score += self.final_score
-                self.final_message = msg
-                self.state = "ROUND_OVER"
-                    
-        elif self.state == "ROUND_OVER":
-            if event.key == pygame.K_SPACE:
-                self.puzzle_idx += 1
-                if self.puzzle_idx >= len(ALL_PUZZLES):
-                    self.state = "MATCH_OVER"
-                    if not self.is_saved: self.save_to_csv()
+                if self.mode == "TRIAL":
+                    # In practice mode there is no match to end, so just move to the next trial puzzle
+                    self.catat_hasil("SURRENDER", 0, "You surrendered (trial only)", KUNING)
+                    self.lanjut_soal()
                 else:
-                    self.load_question()
+                    # SURRENDER: the whole match ends right now. The current puzzle is recorded
+                    # with 0 points, the remaining puzzles are never shown or played,
+                    # and the player keeps the score they have so far.
+                    self.catat_hasil("SURRENDER", 0, "You surrendered (match ended, score kept)", KUNING)
+                    self.selesai_pertandingan()
+            elif event.key == pygame.K_RETURN:
+                # SUBMIT: only allowed when every box is filled
+                if None in self.player_inputs.values():
+                    self.set_notif("Fill in ALL boxes before submitting!", KUNING, 1800)
+                    return
+                is_win, msg = self.evaluasi_pemain()
+                self.ai.is_playing = False
+                skor = self.kalkulasi_poin(is_win)
+                self.catat_hasil("CORRECT" if is_win else "WRONG", skor, msg, HIJAU if is_win else MERAH)
+                self.lanjut_soal()
             elif event.key == pygame.K_ESCAPE:
-                self.state = "MATCH_OVER"
-                if not self.is_saved: self.save_to_csv()
-        
-        elif self.state == "MATCH_OVER" and event.key == pygame.K_SPACE:
-            self.state = "LOGIN"
-            self.username = ""
+                if self.mode == "TRIAL":
+                    # END TRIAL: start the real match
+                    self.mulai_pertandingan(now)
+                else:
+                    # STOP & SAVE SCORE (current puzzle is recorded with no points)
+                    self.ai.is_playing = False
+                    self.catat_hasil("STOPPED", 0, "Game stopped", KUNING)
+                    self.selesai_pertandingan()
 
+        elif self.state == "MATCH_OVER":
+            if event.key == pygame.K_r:
+                self.review_open = not self.review_open
+                self.review_page = 0
+            elif self.review_open and event.key == pygame.K_RIGHT:
+                self.review_page = min(self.review_page + 1, self.total_halaman_review() - 1)
+            elif self.review_open and event.key == pygame.K_LEFT:
+                self.review_page = max(self.review_page - 1, 0)
+            elif self.review_open and event.key == pygame.K_ESCAPE:
+                self.review_open = False
+            elif event.key == pygame.K_SPACE:
+                self.review_open = False
+                self.state = "LOGIN"
+                self.username = ""
+
+    # ---------------------------------------------------------
+    # UPDATE
+    # ---------------------------------------------------------
     def update(self, now):
-        if self.state not in ["PLAYING", "ROUND_OVER"]:
+        if self.state != "PLAYING":
             return
-            
-        elapsed_duration = now - self.global_countdown
-        time_remaining = max(0, self.max_time - elapsed_duration)
-        
-        if time_remaining <= 0:
+
+        if self.mode == "MATCH":
+            durasi_berjalan = now - self.global_waktu_mulai
+            sisa_waktu = max(0, self.waktu_maksimal - durasi_berjalan)
+
+            if sisa_waktu <= 0:
+                self.ai.is_playing = False
+                self.catat_hasil("TIME UP", 0, "Time is up", MERAH)
+                self.selesai_pertandingan()
+                return
+
+        if self.ai.jawaban_ditemukan:
             self.ai.is_playing = False
-            self.state = "MATCH_OVER"
-            if not self.is_saved: self.save_to_csv()
-            return
-                
-        if self.state == "PLAYING" and self.ai.answer_found:
-            self.ai.is_playing = False
-            self.final_score = self.point_calculation(False)
-            self.total_score += self.final_score
-            self.final_message = "AI MEMECAHKAN TEKA-TEKI LEBIH DULU! (-Poin)"
-            self.final_color = PINK
-            self.state = "ROUND_OVER"
+            skor = self.kalkulasi_poin(False)
+            self.catat_hasil("AI FIRST", skor, "The AI solved the puzzle first!", PINK)
+            self.lanjut_soal()
 
     # ---------------------------------------------------------
     # RENDER
