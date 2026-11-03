@@ -15,9 +15,10 @@ ABU = (100, 100, 110)
 HITAM_BULAT = (10, 10, 10)
 
 class Difficulty(Enum): 
-    EASY = (1, 0.3)   
-    MEDIUM = (2, 0.2) 
-    HARD = (3, 0.15)  
+    # (score multiplier, delay per DFS attempt in seconds)
+    EASY = (1, 0.65)
+    MEDIUM = (2, 1.54)
+    HARD = (3, 0.23)
 
 TRIAL_PUZZLES = [
     (("BB", "A", "ACC"), Difficulty.EASY),       #  99  + 1   = 100
@@ -29,13 +30,13 @@ ALL_PUZZLES = [
     (("AB", "A", "BCC"), Difficulty.EASY),       #  91  + 9   = 100
     (("GO", "GO", "OFF"), Difficulty.EASY),      #  61  + 61  = 122
     (("A", "BAB", "CDD"), Difficulty.EASY),      #  9   + 191 = 200
-    (("TO", "SO", "TOO"), Difficulty.EASY)       #  10  + 90  = 100
+    (("TO", "SO", "TOO"), Difficulty.EASY),      #  10  + 90  = 100
 
     (("AB", "BA", "DAD"), Difficulty.MEDIUM),    #  29  + 92  = 121
     (("UI", "IU", "MIT"), Difficulty.MEDIUM),    #  98  + 89  = 187
     (("US", "AS", "ALL"), Difficulty.MEDIUM),    #  85  + 15  = 100
     (("GG", "GI", "IGA"), Difficulty.MEDIUM),    #  99  + 91  = 190
-    (("AIR", "AR", "IRA"), Difficulty.MEDIUM)    #  673 + 63  = 736
+    (("AIR", "AR", "IRA"), Difficulty.MEDIUM),   #  673 + 63  = 736
 
 
     (("AB", "CBC", "ADA"), Difficulty.HARD),     #  91  + 818 = 909
