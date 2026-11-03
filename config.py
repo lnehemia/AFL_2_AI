@@ -12,7 +12,7 @@ HIJAU = (50, 220, 100)
 KUNING = (255, 200, 0)
 MERAH = (220, 40, 40)
 ABU = (100, 100, 110)
-HITAM_BULAT = (10, 10, 10)
+HITAM = (10, 10, 10)
 
 class Difficulty(Enum):
     EASY = 1

@@ -1,6 +1,4 @@
 def _siapkan(w1, w2, w3):
-    """Bagian yang dipakai bersama oleh kedua versi DFS,
-    supaya urutan huruf & pruning dijamin identik."""
     huruf_unik_raw = list(dict.fromkeys(w1 + w2 + w3))
     huruf_awal = {w1[0], w2[0], w3[0]}
 
@@ -13,9 +11,7 @@ def _siapkan(w1, w2, w3):
     max_sisa_bobot = [sum(abs(weights[c]) for c in huruf_unik[i:]) for i in range(len(huruf_unik))]
     return huruf_unik, huruf_awal, weights, max_sisa_bobot
 
-
 def solve_cryptarithm_dfs_fast(w1, w2, w3):
-    """DFS tanpa delay: dipakai untuk kunci jawaban & urutan huruf di UI."""
     huruf_unik, huruf_awal, weights, max_sisa_bobot = _siapkan(w1, w2, w3)
 
     def backtrack(index, current_sum, used_digits, assignment):
@@ -44,14 +40,6 @@ def solve_cryptarithm_dfs_fast(w1, w2, w3):
 
 
 def solve_cryptarithm_dfs_realtime(w1, w2, w3, ai_agent, delay_per_step):
-    """DFS yang sama persis dengan versi fast, tapi tiap percobaan digit
-    ditampilkan lewat ai_agent.ai_ditemukan dan diberi delay.
-
-    Aturan "1 langkah":
-      - 1 langkah = 1 digit yang benar-benar di-assign (digit yang di-skip tidak dihitung)
-      - huruf menyala SELAMA delay langkah itu berjalan
-      - huruf baru padam setelah semua digit di levelnya habis dicoba (backtrack ke atas)
-    """
     huruf_unik, huruf_awal, weights, max_sisa_bobot = _siapkan(w1, w2, w3)
 
     def backtrack(index, current_sum, used_digits, assignment):
@@ -103,8 +91,6 @@ def solve_cryptarithm_dfs_realtime(w1, w2, w3, ai_agent, delay_per_step):
 
 
 def hitung_langkah(w1, w2, w3):
-    """(Opsional) Hitung jumlah langkah DFS realtime tanpa delay.
-    Berguna untuk menentukan delay: waktu AI ≈ langkah × delay."""
     huruf_unik, huruf_awal, weights, max_sisa_bobot = _siapkan(w1, w2, w3)
     langkah = 0
 
