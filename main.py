@@ -29,7 +29,7 @@ class Game:
         self.total_skor = 0
         self.puzzle_idx = 0
 
-        self.waktu_maksimal = 10 * 60 * 1000
+        self.waktu_maksimal = 15 * 60 * 1000
         self.global_waktu_mulai = 0
         self.durasi_akhir = 0
         self.is_saved = False
