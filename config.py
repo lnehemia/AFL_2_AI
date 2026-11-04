@@ -1,5 +1,8 @@
 from enum import Enum
 
+# ---------------------------------------------------------
+# TAMPILAN
+# ---------------------------------------------------------
 LEBAR, TINGGI = 1200, 700
 FPS = 60
 BG = (15, 15, 20)
@@ -14,34 +17,63 @@ MERAH = (220, 40, 40)
 ABU = (100, 100, 110)
 HITAM = (10, 10, 10)
 
+
 class Difficulty(Enum):
+    # nilai = pengali skor
     EASY = 1
     MEDIUM = 2
     HARD = 3
 
-TRIAL_PUZZLES = [
-    (("BB", "A", "ACC"), Difficulty.EASY, 0.2),       #  99  + 1   = 100
-    (("NO", "NO", "TOO"), Difficulty.EASY, 0.65),      #  50  + 50  = 100
-]
 
-ALL_PUZZLES = [
-    (("SS", "SS", "HSU"), Difficulty.EASY, 1.6),      #  99  + 99  = 198
-    (("AB", "A", "BCC"), Difficulty.EASY, 0.65),       #  91  + 9   = 100
-    (("GO", "GO", "OFF"), Difficulty.EASY, 1),      #  61  + 61  = 122
-    (("A", "BAB", "CDD"), Difficulty.EASY, 0.8),      #  9   + 191 = 200
-    (("TO", "SO", "TOO"), Difficulty.EASY, 0.65),      #  10  + 90  = 100
+# ---------------------------------------------------------
+# PEMBUATAN SOAL OTOMATIS
+# ---------------------------------------------------------
+# Operasi per tingkat: "+" tambah, "-" kurang, "*" kali, ":" bagi
+OPERASI = {
+    Difficulty.EASY:   ["+", "-"],
+    Difficulty.MEDIUM: ["*"],
+    Difficulty.HARD:   [":"],
+}
 
-    (("AB", "BA", "DAD"), Difficulty.MEDIUM, 9),    #  29  + 92  = 121
-    (("AA", "BB", "CBC"), Difficulty.MEDIUM, 9),    #  99  + 22  = 121
-    (("US", "AS", "ALL"), Difficulty.MEDIUM, 7),    #  85  + 15  = 100
-    (("GG", "GI", "IGA"), Difficulty.MEDIUM, 9),    #  99  + 91  = 190
-    (("AIR", "AR", "IRA"), Difficulty.MEDIUM, 0.95),   #  673 + 63  = 736
+# Simbol operasi saat ditampilkan di layar
+OP_TAMPIL = {"+": "+", "-": "-", "*": "x", ":": ":"}
 
+# Jumlah huruf unik per soal (min dan maks). Default: min = maks supaya
+# tingkat kesulitannya konsisten. Longgarkan min kalau ingin soal lebih bervariasi.
+HURUF_MIN = {Difficulty.EASY: 3, Difficulty.MEDIUM: 4, Difficulty.HARD: 5}
+HURUF_MAKS = {Difficulty.EASY: 3, Difficulty.MEDIUM: 4, Difficulty.HARD: 5}
 
-    (("AB", "CBC", "ADA"), Difficulty.HARD, 0.15),     #  91  + 818 = 909
-    (("ABC", "ABC", "BDD"), Difficulty.HARD, 0.9),    #  372 + 372 = 744
-    (("ABC", "ABC", "DCD"), Difficulty.HARD, 0.85),    #  237 + 237 = 474
-    (("ADD", "DAD", "BCA"), Difficulty.HARD, 0.22),    #  266 + 626 = 892
-    (("ARA", "ABA", "BAR"), Difficulty.HARD, 1.7),     #  363 + 373 = 736
+# Target waktu AI menyelesaikan satu soal (detik): (terendah, tertinggi) per tingkat.
+# Delay per langkah dihitung otomatis: delay = target / hitung_langkah(soal)
+WAKTU_AI = {
+    Difficulty.EASY:   (20, 35),
+    Difficulty.MEDIUM: (30, 50),
+    Difficulty.HARD:   (45, 75),
+}
 
-]
+# Rentang jumlah langkah DFS yang diterima generator per tingkat. Soal di luar
+# rentang dibuang supaya delay tidak terlalu kecil (animasi tidak terlihat)
+# atau terlalu besar.
+LANGKAH = {
+    Difficulty.EASY:   (10, 300),
+    Difficulty.MEDIUM: (15, 500),
+    Difficulty.HARD:   (30, 800),
+}
+
+# Batas aman delay per langkah (detik)
+DELAY_MIN = 0.05
+DELAY_MAX = 3.0
+
+# Soal boleh punya beberapa kunci jawaban, tapi tidak lebih dari ini
+MAKS_SOLUSI = 6
+
+# Banyak percobaan acak untuk membuat satu soal
+MAKS_PERCOBAAN = 4000
+
+# Susunan soal
+TRIAL_KOMPOSISI = [Difficulty.EASY, Difficulty.EASY]
+MATCH_KOMPOSISI = (
+    [Difficulty.EASY] * 5
+    + [Difficulty.MEDIUM] * 5
+    + [Difficulty.HARD] * 5
+)

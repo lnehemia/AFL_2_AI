@@ -1,3 +1,4 @@
+# main.py
 import pygame
 import sys
 import threading
@@ -7,7 +8,14 @@ import math
 
 from agent import AIAgent
 from config import *
-from algorithms import solve_cryptarithm_dfs_fast, solve_cryptarithm_dfs_realtime
+from algorithms import (
+    solve_cryptarithm_dfs_fast,
+    solve_cryptarithm_dfs_realtime,
+    cari_semua_solusi,
+    cek_relasi,
+)
+from generator import buat_daftar_soal
+
 
 class Game:
     def __init__(self, layar):
@@ -18,9 +26,10 @@ class Game:
         self.font_sedang = pygame.font.SysFont("consolas", 30, bold=True)
         self.font_kecil = pygame.font.SysFont("consolas", 20)
 
+        # States: LOGIN -> MENU -> PLAYING (mode TRIAL, soal baru terus) -> PLAYING (mode MATCH) -> MATCH_OVER
         self.state = "LOGIN"
         self.mode = "TRIAL"
-        self.puzzles = TRIAL_PUZZLES
+        self.puzzles = []                # diisi oleh buat_daftar_soal() saat trial / match dimulai
 
         self.ai = AIAgent()
         self.ai_thread = None
@@ -34,6 +43,12 @@ class Game:
         self.durasi_akhir = 0
         self.is_saved = False
         self.current_diff = None
+
+        # Data soal yang sedang dimainkan
+        self.w1 = self.w2 = self.w3 = ""
+        self.op = "+"
+        self.solusi = None               # kunci jawaban pertama (yang ditemukan DFS fast)
+        self.jml_solusi = 1              # jumlah seluruh kunci jawaban yang valid
 
         self.riwayat = []
         self.review_open = False
@@ -65,10 +80,11 @@ class Game:
             self.riwayat.append({
                 "no": self.puzzle_idx + 1,
                 "diff": self.current_diff.name,
-                "soal": f"{self.w1} + {self.w2} = {self.w3}",
+                "soal": f"{self.w1} {OP_TAMPIL[self.op]} {self.w2} = {self.w3}",
                 "huruf": list(self.huruf_unik),
                 "jawaban_pemain": dict(self.player_inputs),
                 "kunci_ai": dict(self.solusi) if self.solusi else {},
+                "jml_kunci": self.jml_solusi,
                 "status": status,
                 "skor": skor,
                 "pesan": pesan,
@@ -88,7 +104,10 @@ class Game:
     def lanjut_soal(self):
         self.puzzle_idx += 1
         if self.mode == "TRIAL":
-            self.puzzle_idx %= len(self.puzzles)
+            # Trial tidak pernah habis: setelah soal terakhir, buat soal-soal baru
+            if self.puzzle_idx >= len(self.puzzles):
+                self.puzzles = buat_daftar_soal(TRIAL_KOMPOSISI)
+                self.puzzle_idx = 0
             self.muat_soal()
         elif self.puzzle_idx >= len(self.puzzles):
             self.selesai_pertandingan()
@@ -103,11 +122,12 @@ class Game:
         soal, diff, delay_ai = self.puzzles[self.puzzle_idx]
         self.current_diff = diff
 
-        w1, w2, w3 = soal
-        solusi_dfs, urutan_efisien_dfs = solve_cryptarithm_dfs_fast(w1, w2, w3)
+        w1, op, w2, w3 = soal
+        solusi_dfs, urutan_efisien_dfs = solve_cryptarithm_dfs_fast(w1, op, w2, w3)
 
-        self.w1, self.w2, self.w3 = w1, w2, w3
+        self.w1, self.op, self.w2, self.w3 = w1, op, w2, w3
         self.solusi = solusi_dfs
+        self.jml_solusi = max(1, len(cari_semua_solusi(w1, op, w2, w3, maks=MAKS_SOLUSI)))
         self.huruf_unik = urutan_efisien_dfs.copy()
 
         self.player_inputs = {h: None for h in self.huruf_unik}
@@ -117,7 +137,7 @@ class Game:
 
         self.ai_thread = threading.Thread(
             target=solve_cryptarithm_dfs_realtime,
-            args=(self.w1, self.w2, self.w3, self.ai, delay_ai)
+            args=(self.w1, self.op, self.w2, self.w3, self.ai, delay_ai)
         )
         self.ai_thread.daemon = True
         self.ai_thread.start()
@@ -126,7 +146,7 @@ class Game:
 
     def mulai_trial(self):
         self.mode = "TRIAL"
-        self.puzzles = TRIAL_PUZZLES
+        self.puzzles = buat_daftar_soal(TRIAL_KOMPOSISI)
         self.puzzle_idx = 0
         self.notif_teks = ""
         self.muat_soal()
@@ -134,7 +154,7 @@ class Game:
     def mulai_pertandingan(self, now):
         self.hentikan_ai()
         self.mode = "MATCH"
-        self.puzzles = ALL_PUZZLES
+        self.puzzles = buat_daftar_soal(MATCH_KOMPOSISI)
         self.total_skor = 0
         self.puzzle_idx = 0
         self.global_waktu_mulai = now
@@ -154,7 +174,7 @@ class Game:
     def evaluasi_pemain(self):
         kosong = [h for h in self.huruf_unik if self.player_inputs[h] is None]
         if kosong:
-            return None, f"Fill in ALL boxes first!"
+            return None, "Fill in ALL boxes first!"
 
         huruf_awal = {self.w1[0], self.w2[0], self.w3[0]}
         nol = [h for h in self.huruf_unik if h in huruf_awal and self.player_inputs[h] == 0]
@@ -166,15 +186,17 @@ class Game:
             pemakai.setdefault(self.player_inputs[h], []).append(h)
         for digit, daftar in pemakai.items():
             if len(daftar) > 1:
-                return None, f"{digit} is used by more than one letter!)"
+                return None, f"Digit {digit} is used by more than one letter! ({', '.join(daftar)})"
 
+        # Dinilai dengan hitungan, BUKAN dengan membandingkan ke kunci DFS,
+        # sehingga semua kunci jawaban yang valid dianggap benar.
         n1 = int("".join(str(self.player_inputs[c]) for c in self.w1))
         n2 = int("".join(str(self.player_inputs[c]) for c in self.w2))
         n3 = int("".join(str(self.player_inputs[c]) for c in self.w3))
 
-        if n1 + n2 == n3:
+        if cek_relasi(self.op, n1, n2, n3):
             return True, "CORRECT! Accurate calculation."
-        return False, f"FAILED: {n1} + {n2} != {n3}"
+        return False, f"FAILED: {n1} {OP_TAMPIL[self.op]} {n2} != {n3}"
 
     def proses_event(self, event, now):
         if event.type == pygame.QUIT:
@@ -224,6 +246,7 @@ class Game:
             elif event.key == pygame.K_RETURN:
                 is_win, msg = self.evaluasi_pemain()
 
+                # None = input belum valid: tampilkan pesan, tahan Enter (tanpa skor, soal tidak berganti)
                 if is_win is None:
                     self.set_notif(msg, KUNING, 2500)
                     return
@@ -336,8 +359,9 @@ class Game:
                 for h in r["huruf"]
             )
             kunci = " ".join(f"{h}:{r['kunci_ai'].get(h, '?')}" for h in r["huruf"])
+            ekstra = f"   (+{r['jml_kunci'] - 1} other valid keys)" if r["jml_kunci"] > 1 else ""
             self.draw_teks(f"You : {jawab}", self.font_kecil, wrn if r["status"] in ("CORRECT", "WRONG") else ABU, px + 25, y + 28, "topleft")
-            self.draw_teks(f"AI  : {kunci}", self.font_kecil, HIJAU, px + 25, y + 54, "topleft")
+            self.draw_teks(f"AI  : {kunci}{ekstra}", self.font_kecil, HIJAU, px + 25, y + 54, "topleft")
             y += self.ENTRY_H
 
         footer = f"Page {self.review_page + 1}/{total_hal}  |  <- / -> : Change Page  |  R : Close"
@@ -359,17 +383,21 @@ class Game:
             return
 
         if self.state == "MENU":
+            n_easy = MATCH_KOMPOSISI.count(Difficulty.EASY)
+            n_med = MATCH_KOMPOSISI.count(Difficulty.MEDIUM)
+            n_hard = MATCH_KOMPOSISI.count(Difficulty.HARD)
             self.draw_teks("HOW TO PLAY", self.font_judul, CYAN, LEBAR//2, 120, "midtop")
             instruksi = [
-                "1. You start with a TRIAL ROUND: practice puzzles that loop endlessly.",
+                "1. You start with a TRIAL ROUND: practice puzzles that never run out.",
                 "2. Press ESC during the trial whenever you are ready to start the real match.",
-                "3. The match lasts at most 10 MINUTES for 15 puzzles (5 Easy, 5 Medium, 5 Hard).",
-                "4. Each win gives (+10/+20/+30) points.",
-                "5. A wrong answer or being beaten by the AI costs (-10/-20/-30) points.",
-                "6. You get only 1 submit (ENTER) per puzzle, and ALL boxes must be filled.",
-                "7. Press S to SURRENDER: the match ends and you keep your current score.",
-                "8. You can STOP & SAVE your score at any time during the match (ESC).",
-                "9. Once finished, press R to review your answers and the AI's key.",
+                f"3. The match lasts at most {self.waktu_maksimal // 60000} MINUTES for {len(MATCH_KOMPOSISI)} puzzles ({n_easy} Easy, {n_med} Medium, {n_hard} Hard).",
+                "4. Puzzles are random. Easy: + and -   Medium: x   Hard: : (exact division).",
+                "5. Each win gives (+10/+20/+30) points.",
+                "6. A wrong answer or being beaten by the AI costs (-10/-20/-30) points.",
+                "7. Only 1 submit (ENTER) per puzzle. ALL boxes must be filled. Any valid key counts.",
+                "8. Press S to SURRENDER: the match ends and you keep your current score.",
+                "9. You can STOP & SAVE your score at any time during the match (ESC).",
+                "10. Once finished, press R to review your answers and the AI's key.",
                 "Press ENTER to Start the Trial Round!"
             ]
             for i, teks in enumerate(instruksi):
@@ -391,7 +419,7 @@ class Game:
                 self.draw_teks("No timer, score not counted", self.font_kecil, ABU, LEBAR//2, 68, "midtop")
                 self.draw_teks("Press ESC to start the real match", self.font_kecil, HIJAU, LEBAR - 20, 20, "topright")
             else:
-                self.draw_teks(f"PUZZLE {self.puzzle_idx + 1}/{len(ALL_PUZZLES)} - {self.current_diff.name}", self.font_kecil, KUNING, 20, 20, "topleft")
+                self.draw_teks(f"PUZZLE {self.puzzle_idx + 1}/{len(self.puzzles)} - {self.current_diff.name}", self.font_kecil, KUNING, 20, 20, "topleft")
 
         if self.state == "MATCH_OVER" or self.mode == "MATCH":
             self.draw_teks("TIMER", self.font_kecil, ABU, LEBAR//2, 10, "midtop")
@@ -412,7 +440,7 @@ class Game:
             return
 
         self.draw_teks("Puzzle:", self.font_kecil, ABU, LEBAR//2, 120, "midtop")
-        self.draw_teks(f"{self.w1} + {self.w2} = {self.w3}", self.font_judul, TEKS, LEBAR//2, 145, "midtop")
+        self.draw_teks(f"{self.w1} {OP_TAMPIL[self.op]} {self.w2} = {self.w3}", self.font_judul, TEKS, LEBAR//2, 145, "midtop")
 
         jum_huruf = len(self.huruf_unik)
         k_w, k_h, spasi = 60, 80, 15
@@ -426,6 +454,7 @@ class Game:
             pygame.draw.rect(self.layar, GARIS, (x, 270, k_w, k_h), 2, border_radius=8)
             self.draw_teks(huruf, self.font_kecil, ABU, x + k_w//2, 280, "midtop")
 
+            # hitam = belum dicoba, kuning = digit tentatif (bisa di-backtrack), hijau = jawaban fixed
             if final:
                 warna_bulat = HIJAU
             elif huruf in self.ai.ai_ditemukan:
