@@ -24,6 +24,4 @@ class AIAgent:
         self.is_playing = True
 
     def tunggu(self, detik):
-        """Pengganti time.sleep yang bisa diinterupsi.
-        Return False kalau AI dihentikan saat menunggu."""
         return not self._stop.wait(detik)
