@@ -354,7 +354,6 @@ class Game:
             kunci = " ".join(f"{h}:{r['kunci_ai'].get(h, '?')}" for h in r["huruf"])
             ekstra = f"   (+{r['jml_kunci'] - 1} other valid keys)" if r["jml_kunci"] > 1 else ""
             self.draw_teks(f"You : {jawab}", self.font_kecil, wrn if r["status"] in ("CORRECT", "WRONG") else ABU, px + 25, y + 28, "topleft")
-            self.draw_teks(f"AI  : {kunci}{ekstra}", self.font_kecil, HIJAU, px + 25, y + 54, "topleft")
             y += self.ENTRY_H
 
         footer = f"Page {self.review_page + 1}/{total_hal}  |  <- / -> : Change Page  |  R : Close"
