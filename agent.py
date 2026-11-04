@@ -5,7 +5,7 @@ class AIAgent:
         self.ai_ditemukan = []
         self.jawaban_ditemukan = False
         self._stop = threading.Event()
-        self._stop.set()                  # belum bermain
+        self._stop.set()
 
     @property
     def is_playing(self):
@@ -16,7 +16,7 @@ class AIAgent:
         if nilai:
             self._stop.clear()
         else:
-            self._stop.set()              # membangunkan thread yang sedang menunggu
+            self._stop.set()
 
     def setup_round(self):
         self.ai_ditemukan = []

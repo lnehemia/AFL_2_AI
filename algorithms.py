@@ -62,27 +62,24 @@ def solve_cryptarithm_dfs_realtime(w1, w2, w3, ai_agent, delay_per_step):
             if not ai_agent.is_playing:
                 return None
 
-            # digit yang di-skip tidak dihitung sebagai langkah (tanpa delay)
             if digit in used_digits or (digit == 0 and char in huruf_awal):
                 continue
 
-            # assign dulu, baru tunggu: hijau terlihat selama delay
             assignment[char] = digit
             used_digits.add(digit)
             if char not in ai_agent.ai_ditemukan:
                 ai_agent.ai_ditemukan.append(char)
 
-            if not ai_agent.tunggu(delay_per_step):   # dihentikan saat menunggu
+            if not ai_agent.tunggu(delay_per_step):
                 return None
 
             hasil = backtrack(index + 1, current_sum + weight * digit, used_digits, assignment)
             if hasil:
-                return hasil   # solusi ketemu: semua huruf tetap hijau
+                return hasil
 
             del assignment[char]
             used_digits.remove(digit)
 
-        # semua digit di level ini sudah dicoba -> huruf padam, balik ke level atas
         if char in ai_agent.ai_ditemukan:
             ai_agent.ai_ditemukan.remove(char)
         return None
