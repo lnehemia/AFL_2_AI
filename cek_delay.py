@@ -1,4 +1,3 @@
-# cek_delay.py - alat bantu: lihat soal acak yang dibuat generator beserta delay & waktu AI-nya
 from config import *
 from generator import buat_daftar_soal
 from algorithms import hitung_langkah, cari_semua_solusi, angka

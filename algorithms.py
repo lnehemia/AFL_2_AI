@@ -1,9 +1,6 @@
 OPERASI_VALID = ("+", "-", "*", ":")
 
-
 def cek_relasi(op, n1, n2, n3):
-    """Satu-satunya tempat yang menentukan apakah 'n1 op n2 = n3' benar.
-    Dipakai oleh DFS maupun penilaian jawaban pemain."""
     if op == "+":
         return n1 + n2 == n3
     if op == "-":
@@ -11,22 +8,16 @@ def cek_relasi(op, n1, n2, n3):
     if op == "*":
         return n1 * n2 == n3
     if op == ":":
-        return n2 != 0 and n1 == n2 * n3      # pembagian harus habis
+        return n2 != 0 and n1 == n2 * n3
     return False
 
-
 def angka(kata, assignment):
-    """Ubah kata (deretan huruf) menjadi bilangan, berdasarkan assignment."""
     n = 0
     for c in kata:
         n = n * 10 + assignment[c]
     return n
 
-
 class Masalah:
-    """Formulasi masalah yang dipakai bersama oleh semua fungsi DFS,
-    sehingga urutan huruf, urutan digit, dan pruning dijamin identik."""
-
     def __init__(self, w1, op, w2, w3):
         if op not in OPERASI_VALID:
             raise ValueError(f"Operasi tidak dikenal: {op}")
@@ -36,7 +27,6 @@ class Masalah:
         self.linear = op in ("+", "-")
 
         if self.linear:
-            # + : w1 + w2 - w3 = 0      - : w1 - w2 - w3 = 0
             tanda = (1, 1, -1) if op == "+" else (1, -1, -1)
             self.bobot = {c: 0 for c in semua}
             for kata, t in zip((w1, w2, w3), tanda):
@@ -48,21 +38,16 @@ class Masalah:
                 for i in range(len(self.huruf_unik))
             ]
         else:
-            # Kali  : w1 * w2 = w3   -> hasil = w3, faktor = w1, w2
-            # Bagi  : w1 : w2 = w3   -> w1 = w2 * w3, hasil = w1, faktor = w2, w3
             if op == "*":
                 self.hasil, self.f1, self.f2 = w3, w1, w2
             else:
                 self.hasil, self.f1, self.f2 = w1, w2, w3
             faktor = list(dict.fromkeys(self.f1 + self.f2))
             sisa = [c for c in dict.fromkeys(self.hasil) if c not in faktor]
-            self.huruf_unik = faktor + sisa       # huruf faktor dulu, huruf hasil terakhir
+            self.huruf_unik = faktor + sisa
             self.n_faktor = len(faktor)
 
     def _wajib(self, assignment):
-        """Dipanggil saat semua huruf faktor sudah terisi. Hasil kali sudah pasti,
-        jadi digit huruf-huruf hasil yang tersisa 'dipaksa'. Return None kalau
-        hasil kali tidak cocok dengan pola kata hasil."""
         s = str(angka(self.f1, assignment) * angka(self.f2, assignment))
         if len(s) != len(self.hasil):
             return None
@@ -83,7 +68,6 @@ class Masalah:
         return wajib
 
     def kandidat(self, index, assignment):
-        """Digit yang boleh dicoba untuk huruf ke-index. Kosong = cabang dipotong (pruning)."""
         if self.linear:
             jumlah = sum(self.bobot[c] * d for c, d in assignment.items())
             if abs(jumlah) > self.max_sisa[index] * 9:
@@ -107,7 +91,6 @@ class Masalah:
 
 
 def solve_cryptarithm_dfs_fast(w1, op, w2, w3):
-    """DFS tanpa delay: dipakai untuk kunci jawaban & urutan huruf di UI."""
     m = Masalah(w1, op, w2, w3)
     huruf = m.huruf_unik
 
@@ -133,12 +116,6 @@ def solve_cryptarithm_dfs_fast(w1, op, w2, w3):
 
 
 def solve_cryptarithm_dfs_realtime(w1, op, w2, w3, ai_agent, delay_per_step):
-    """DFS yang sama persis dengan versi fast, tapi tiap digit yang di-assign
-    ditampilkan lewat ai_agent.ai_ditemukan dan diberi delay.
-
-    1 langkah = 1 digit yang benar-benar di-assign (digit yang di-skip tidak dihitung).
-    Huruf menyala selama delay langkahnya, dan baru padam setelah semua digit
-    di levelnya habis dicoba (backtrack ke atas)."""
     m = Masalah(w1, op, w2, w3)
     huruf = m.huruf_unik
 
@@ -183,9 +160,6 @@ def solve_cryptarithm_dfs_realtime(w1, op, w2, w3, ai_agent, delay_per_step):
 
 
 def hitung_langkah(w1, op, w2, w3, batas=None):
-    """Hitung jumlah langkah DFS realtime (tanpa delay) sampai solusi pertama.
-    Waktu AI = langkah x delay. Kalau 'batas' diisi, perhitungan berhenti begitu
-    langkah melebihi batas (hasilnya batas + 1)."""
     m = Masalah(w1, op, w2, w3)
     huruf = m.huruf_unik
     langkah = 0
@@ -219,8 +193,6 @@ def hitung_langkah(w1, op, w2, w3, batas=None):
 
 
 def cari_semua_solusi(w1, op, w2, w3, maks=None):
-    """Cari SEMUA kunci jawaban. Kalau 'maks' diisi, pencarian berhenti begitu
-    jumlah solusi melebihi maks (hasilnya berisi maks + 1 solusi)."""
     m = Masalah(w1, op, w2, w3)
     huruf = m.huruf_unik
     hasil = []

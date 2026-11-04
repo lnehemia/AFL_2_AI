@@ -1,4 +1,3 @@
-# main.py
 import pygame
 import sys
 import threading
@@ -26,10 +25,9 @@ class Game:
         self.font_sedang = pygame.font.SysFont("consolas", 30, bold=True)
         self.font_kecil = pygame.font.SysFont("consolas", 20)
 
-        # States: LOGIN -> MENU -> PLAYING (mode TRIAL, soal baru terus) -> PLAYING (mode MATCH) -> MATCH_OVER
         self.state = "LOGIN"
         self.mode = "TRIAL"
-        self.puzzles = []                # diisi oleh buat_daftar_soal() saat trial / match dimulai
+        self.puzzles = []
 
         self.ai = AIAgent()
         self.ai_thread = None
@@ -44,11 +42,10 @@ class Game:
         self.is_saved = False
         self.current_diff = None
 
-        # Data soal yang sedang dimainkan
         self.w1 = self.w2 = self.w3 = ""
         self.op = "+"
-        self.solusi = None               # kunci jawaban pertama (yang ditemukan DFS fast)
-        self.jml_solusi = 1              # jumlah seluruh kunci jawaban yang valid
+        self.solusi = None
+        self.jml_solusi = 1
 
         self.riwayat = []
         self.review_open = False
@@ -104,7 +101,6 @@ class Game:
     def lanjut_soal(self):
         self.puzzle_idx += 1
         if self.mode == "TRIAL":
-            # Trial tidak pernah habis: setelah soal terakhir, buat soal-soal baru
             if self.puzzle_idx >= len(self.puzzles):
                 self.puzzles = buat_daftar_soal(TRIAL_KOMPOSISI)
                 self.puzzle_idx = 0
@@ -188,8 +184,6 @@ class Game:
             if len(daftar) > 1:
                 return None, f"Digit {digit} is used by more than one letter! ({', '.join(daftar)})"
 
-        # Dinilai dengan hitungan, BUKAN dengan membandingkan ke kunci DFS,
-        # sehingga semua kunci jawaban yang valid dianggap benar.
         n1 = int("".join(str(self.player_inputs[c]) for c in self.w1))
         n2 = int("".join(str(self.player_inputs[c]) for c in self.w2))
         n3 = int("".join(str(self.player_inputs[c]) for c in self.w3))
@@ -246,7 +240,6 @@ class Game:
             elif event.key == pygame.K_RETURN:
                 is_win, msg = self.evaluasi_pemain()
 
-                # None = input belum valid: tampilkan pesan, tahan Enter (tanpa skor, soal tidak berganti)
                 if is_win is None:
                     self.set_notif(msg, KUNING, 2500)
                     return
@@ -454,7 +447,6 @@ class Game:
             pygame.draw.rect(self.layar, GARIS, (x, 270, k_w, k_h), 2, border_radius=8)
             self.draw_teks(huruf, self.font_kecil, ABU, x + k_w//2, 280, "midtop")
 
-            # hitam = belum dicoba, kuning = digit tentatif (bisa di-backtrack), hijau = jawaban fixed
             if final:
                 warna_bulat = HIJAU
             elif huruf in self.ai.ai_ditemukan:
