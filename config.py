@@ -32,7 +32,7 @@ ALL_PUZZLES = [
     (("TO", "SO", "TOO"), Difficulty.EASY, 0.65),      #  10  + 90  = 100
 
     (("AB", "BA", "DAD"), Difficulty.MEDIUM, 9),    #  29  + 92  = 121
-    (("UI", "IU", "MIT"), Difficulty.MEDIUM, 1.3),    #  98  + 89  = 187
+    (("AA", "BB", "CBC"), Difficulty.MEDIUM, 9),    #  99  + 22  = 121
     (("US", "AS", "ALL"), Difficulty.MEDIUM, 7),    #  85  + 15  = 100
     (("GG", "GI", "IGA"), Difficulty.MEDIUM, 9),    #  99  + 91  = 190
     (("AIR", "AR", "IRA"), Difficulty.MEDIUM, 0.95),   #  673 + 63  = 736
